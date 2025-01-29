@@ -1,9 +1,10 @@
 //Renderer Matrix Library
-//TODO: garbage collector, quaternions, transpose/major, camera
+//TODO: garbage collector, quaternions, transpose/major, camera, fix errors
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <stdbool.h>
 
 #include "rml.h"
 
@@ -174,10 +175,24 @@ void rmlScalarByVector(float scalar, rmlVector* vec) {
 	} else printf("RML_ERROR_SCALARBYVECTOR: passed NULL.\n");
 }
 
+//For 'op', 1 is plus and 0 is minus.
+rmlVector* rmlAddVector(rmlVector* in1, bool op ,rmlVector* in2) {
+	if (in1->size != in2->size) {
+		printf("RML_ERROR_ADDVECTOR: in1->size != in2->size.\n");
+		return NULL;
+	}
+	int sign = op == 1 ? 1 : -1;
+	rmlVector* out = rmlAllocateVector(in1->size);
+	for (int i = 0; i < out->size; i++) {
+		out->val[i] += in1->val[i] + sign * in2->val[i];
+	}
+	return out;
+}
+
 //Returns pointer to vector that is cross product of input vectors.
 //Only defined for size = 3.
 //Anticommutative, so a x b = - b x a.
-//Dynamically allocates. User must free with rmlFreeMatrix.
+//Dynamically allocates. User must free with rmlFreeVector.
 rmlVector* rmlCrossVector(rmlVector* in1, rmlVector* in2) {
 	if (in1->size != in2->size || in1->size != 3) {
 		printf("RML_ERROR_CROSSVECTOR: in1->size != in2->size || in1->size != 3.\n");
@@ -192,15 +207,26 @@ rmlVector* rmlCrossVector(rmlVector* in1, rmlVector* in2) {
 
 void rmlNormaliseVector(rmlVector* vec) {
 	if (vec != NULL) {
-		float mag = sqrt(vec->val[0]*vec->val[0]+vec->val[1]*vec->val[1]+vec->val[2]*vec->val[2]);
-		if (mag == 0.0) {
-			printf("RML_ERROR_NORMALVECTOR: mag == 0.0.\n");
+		float length = rmlLengthOfVector(vec);
+		if (length == 0.0) {
+			printf("RML_ERROR_NORMALVECTOR: length == 0.0.\n");
 			return;
 		}
-		vec->val[0] = vec->val[0] / mag;
-		vec->val[1] = vec->val[1] / mag;
-		vec->val[2] = vec->val[2] / mag;
+		vec->val[0] = vec->val[0] / length;
+		vec->val[1] = vec->val[1] / length;
+		vec->val[2] = vec->val[2] / length;
 	} else printf("RML_ERROR_NORMALVECTOR: passed NULL.\n");
+}
+
+float rmlLengthOfVector(rmlVector* vec) {
+	if (vec != NULL) {
+		float length = 0.0;
+		for (int i = 0; i < vec->size; i++) {
+			length += vec->val[i]*vec->val[i];
+		}
+		return sqrt(length);
+	} else printf("RML_ERROR_LENGTHOFVECTOR: passed NULL.\n");
+	return NAN;
 }
 
 //Returns pointer to size*size identity matrix.
