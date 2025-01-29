@@ -1,9 +1,9 @@
 //Renderer Matrix Library
-//Operations modify, calls for specific mat/vec return pointers.
-//TODO: maybe add garbage collector?
+//TODO: garbage collector, quaternions, transpose/major, camera
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "rml.h"
 
@@ -61,6 +61,7 @@ void rmlPrintMatrix(rmlMatrix* mat) {
 			}
 		printf("\n");
 		}
+		printf("\n");
 	} else printf("RML_ERROR_PRINTMATRIX: passed NULL.\n");
 }
 
@@ -97,20 +98,20 @@ void rmlPrintVector(rmlVector* vec) {
 		for (int i = 0; i < vec->size; i++) {
 			printf("%.2f\n", vec->val[i]);
 		}
+		printf("\n");
 	} else printf("RML_ERROR_PRINTVECTOR: passed NULL.\n");
 }
 
-//Modifies matrix pointed to by 'out' to dot product of two matrices (or vectors).
-//Commutative for vectors but not for matrices.
-void rmlDotProduct(rmlMatrix* in1, rmlMatrix* in2, rmlMatrix* out) {
+//Returns pointer to matrix that is dot product of input matrices.
+//If input is m*n.n*p, output is m*p.
+//Not commutative.
+//Dynamically allocates. User must free with rmlFreeMatrix.
+rmlMatrix* rmlDotMatrix(rmlMatrix* in1, rmlMatrix* in2) {
 	if (in1->col != in2->row) {
-		printf("RML_ERROR_DOTPRODUCT: in1->col != in2->row.\n");
-		return;
+		printf("RML_ERROR_DOTMATRIX: in1->col != in2->row.\n");
+		return NULL;
 	}
-	if (out->row != in1->row || out->col != in2->col) {
-		printf("RML_ERROR_DOTPRODUCT: out->row != in1->row || out->col != in2->col.\n");
-		return;
-	}
+	rmlMatrix* out = rmlAllocateMatrix(in1->row, in2->col);
 	for (int i = 0; i < in1->row; i++) {
 		for (int j = 0; j < in2->col; j++) {
 			for (int k = 0; k < in1->col; k++) {
@@ -118,21 +119,88 @@ void rmlDotProduct(rmlMatrix* in1, rmlMatrix* in2, rmlMatrix* out) {
 			}
 		}
 	}
+	return out;
 }; 
 
-void rmlScalarProduct(float scalar, rmlMatrix* mat) {
+//Returns dot product of two vectors.
+//Commutative.
+float rmlDotVector(rmlVector* in1, rmlVector* in2) {
+	if (in1->size != in2->size) {
+		printf("RML_ERROR_DOTVECTOR: in1->size != in2->size.\n");
+		return NAN;
+	}
+	float out = 0.0;
+	for (int i = 0; i < in1->size; i++) {
+		out += in1->val[i] * in2->val[i];
+	}
+	return out;
+}; 
+
+//Returns pointer to vector that is dot product of input matrix and vector.
+//Dynamically allocates. User must free with rmlFreeMatrix.
+rmlVector* rmlDotMatrixVector(rmlMatrix* mat, rmlVector* vec) {
+	if (mat->col != vec->size) {
+		printf("RML_ERROR_DOTMATRIXVECTOR: mat->col != vec->size.\n");
+		return NULL;
+	}
+	rmlVector* out = rmlAllocateVector(mat->row);
+	for (int i = 0; i < mat->row; i++) {
+		for (int j = 0; j < mat->col; j++) {
+			out->val[i] += mat->val[i][j] * vec->val[j];
+		}
+	}
+	return out;
+}; 
+
+//Multiplies every member of matrix by scalar.
+//Uniform scale.
+void rmlScalarByMatrix(float scalar, rmlMatrix* mat) {
 	if (mat != NULL) {
 		for (int i = 0; i < mat->row; i++) {
 			for (int j = 0; j < mat->col; j++) {
 				mat->val[i][j] = scalar * mat->val[i][j];
 			}
 		}
-	} else printf("RML_ERROR_SCALARPRODUCT: passed NULL.\n");
+	} else printf("RML_ERROR_SCALARBYMATRIX: passed NULL.\n");
 }
 
-//TODO: Fix!!
-//Modifies matrix pointed to by 'mat' from row-major to column-major or vice versa.
-void rmlSwitchMajor(rmlMatrix* mat) {
+//Multiplies every member of vector by scalar.
+//Uniform scale.
+void rmlScalarByVector(float scalar, rmlVector* vec) {
+	if (vec != NULL) {
+		for (int i = 0; i < vec->size; i++) {
+			vec->val[i] = scalar * vec->val[i];
+		}
+	} else printf("RML_ERROR_SCALARBYVECTOR: passed NULL.\n");
+}
+
+//Returns pointer to vector that is cross product of input vectors.
+//Only defined for size = 3.
+//Anticommutative, so a x b = - b x a.
+//Dynamically allocates. User must free with rmlFreeMatrix.
+rmlVector* rmlCrossVector(rmlVector* in1, rmlVector* in2) {
+	if (in1->size != in2->size || in1->size != 3) {
+		printf("RML_ERROR_CROSSVECTOR: in1->size != in2->size || in1->size != 3.\n");
+		return NULL;
+	}
+	rmlVector* out = rmlAllocateVector(3);
+	out->val[0] = in1->val[1] * in2->val[2] - in1->val[2] * in2->val[1];		
+	out->val[1] = in1->val[2] * in2->val[0] - in1->val[0] * in2->val[2];		
+	out->val[2] = in1->val[0] * in2->val[1] - in1->val[1] * in2->val[0];		
+	return out;
+}
+
+void rmlNormaliseVector(rmlVector* vec) {
+	if (vec != NULL) {
+		float mag = sqrt(vec->val[0]*vec->val[0]+vec->val[1]*vec->val[1]+vec->val[2]*vec->val[2]);
+		if (mag == 0.0) {
+			printf("RML_ERROR_NORMALVECTOR: mag == 0.0.\n");
+			return;
+		}
+		vec->val[0] = vec->val[0] / mag;
+		vec->val[1] = vec->val[1] / mag;
+		vec->val[2] = vec->val[2] / mag;
+	} else printf("RML_ERROR_NORMALVECTOR: passed NULL.\n");
 }
 
 //Returns pointer to size*size identity matrix.
@@ -150,6 +218,7 @@ rmlMatrix* rmlIdentityMatrix(unsigned int size) {
 }
 
 //Returns pointer to 3*3 or 4*4 scaling matrix specified by 'vec'.
+//Not uniform scale.
 //Dynamically allocates. User must free with rmlFreeMatrix.
 rmlMatrix* rmlScalingMatrix(rmlVector* vec) {	
 	if (!(vec->size == 2 || vec->size  == 3)) {
@@ -161,7 +230,7 @@ rmlMatrix* rmlScalingMatrix(rmlVector* vec) {
 		for (int j = 0; j < mat->col; j++) {
 			if (i == j && i != vec->size) {
 				mat->val[i][j] = vec->val[i];
-			} else if (i ==j && i == vec->size) mat->val[i][j] = 1.0;
+			} else if (i == j && i == vec->size) mat->val[i][j] = 1.0;
 		}
 	}
 	return mat;
@@ -170,14 +239,43 @@ rmlMatrix* rmlScalingMatrix(rmlVector* vec) {
 //Returns pointer to 3*3 or 4*4 translation matrix specified by 'vec'.
 //Dynamically allocates. User must free with rmlFreeMatrix.
 rmlMatrix* rmlTranslationMatrix(rmlVector* vec) {
-	if (!(vec->size == 2 || vec->size  == 3)) {
-		printf("RML_ERROR_TRANSLATIONMATRIX: !(vec->size == 2 || vec->size  == 3).\n");
+	if (!(vec->size == 2 || vec->size == 3)) {
+		printf("RML_ERROR_TRANSLATIONMATRIX: !(vec->size == 2 || vec->size == 3).\n");
 		return NULL;
 	}
 	rmlMatrix* mat = rmlIdentityMatrix(vec->size + 1);
 	mat->val[0][mat->col - 1] = vec->val[0];
 	mat->val[1][mat->col - 1] = vec->val[1];
 	if (vec->size == 3) mat->val[2][mat->col - 1] = vec->val[2];
+	return mat;
+}
+
+//Returns pointer to 3*3 or 4*4 rotation matrix specified by rotation axis 'vec' and angle 'rad' (ccw +ve radians).
+//Can result in gimbal lock.
+//Dynamically allocates. User must free with rmlFreeMatrix.
+rmlMatrix* rmlRotationMatrix(rmlVector* vec, double rad) {
+	if (!(vec->size == 2 || vec->size == 3)) {
+		printf("RML_ERROR_ROTATIONMATRIX: !(vec->size == 2 || vec->size == 3).\n");
+		return NULL;
+	}
+	rmlMatrix* mat = rmlAllocateMatrix(vec->size + 1, vec->size + 1);
+	mat->val[mat->row - 1][mat->col - 1] = 1.0;
+	if (vec->size == 2) {
+		mat->val[0][0] = cos(rad);	
+		mat->val[0][1] = sin(rad);	
+		mat->val[1][0] = -sin(rad);	
+		mat->val[1][1] = cos(rad);	
+	} else {
+		mat->val[0][0] = cos(rad) + vec->val[0] * vec->val[0] * (1 - cos(rad));
+		mat->val[0][1] = vec->val[0] * vec->val[1] * (1 - cos(rad)) - vec->val[2] * sin(rad);	
+		mat->val[0][2] = vec->val[0] * vec->val[2] * (1 - cos(rad)) + vec->val[1] * sin(rad);
+		mat->val[1][0] = vec->val[1] * vec->val[0] * (1 - cos(rad)) + vec->val[2] * sin(rad);
+		mat->val[1][1] = cos(rad) + vec->val[1] * vec->val[1] * (1 - cos(rad));
+		mat->val[1][2] = vec->val[1] * vec->val[2] * (1 - cos(rad)) - vec->val[0] * sin(rad);
+		mat->val[2][0] = vec->val[2] * vec->val[0] * (1 - cos(rad)) - vec->val[1] * sin(rad);
+		mat->val[2][1] = vec->val[2] * vec->val[1] * (1 - cos(rad)) + vec->val[0] * sin(rad);
+		mat->val[2][2] = cos(rad) + vec->val[2] * vec->val[2] * (1 - cos(rad));
+	}	
 	return mat;
 }
 
@@ -198,3 +296,7 @@ void rmlProjectionMatrix(unsigned int row, unsigned int col) {
 	//Apply matrix or return matrix?
 }
 
+//TODO: Fix!!
+//Modifies matrix pointed to by 'mat' from row-major to column-major or vice versa.
+void rmlSwitchMajor(rmlMatrix* mat) {
+}
